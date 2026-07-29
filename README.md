@@ -29,9 +29,8 @@ OBS Cursor Tools highlights your cursor, shows which mouse button was clicked, a
 ## Download and install
 
 1. Download the latest version from [Releases](https://github.com/mesutakcan/OBS-Cursor-Tools/releases).
-2. Extract the downloaded ZIP file to a folder.
-3. Start <code>OBS-Cursor-Tools.exe</code>.
-4. The application will continue running in the notification area near the clock.
+2. Start <code>OBS-Cursor-Tools.exe</code>.
+3. The application will continue running in the notification area near the clock.
 
 You can also run <code>OBS-Cursor-Tools.ahk</code> directly if [AutoHotkey v2](https://www.autohotkey.com/) is installed.
 
@@ -200,7 +199,6 @@ This application uses the library file [Gdip_All.ahk](https://github.com/buliasz
 ## History
 ### v1.0 2026-07-29
 - Initial release
-
 
 ## License
 
