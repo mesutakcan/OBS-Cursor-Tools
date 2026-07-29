@@ -111,6 +111,57 @@ You can change:
 
 The color values use ARGB hexadecimal format, for example <code>0xFFFF0000</code> for an opaque red color. If you are unsure about a setting, keep a backup of <code>settings.ini</code> before editing it.
 
+## Settings Reference
+
+All settings live in `settings.ini`, organized into three sections. Edit values with a text editor while the application is closed, then start it again.
+
+### [Hotkeys]
+
+Hotkeys use AutoHotkey v2 format: `^` = Ctrl, `!` = Alt, `+` = Shift, `#` = Win. Example: `^+F8` means Ctrl+Shift+F8.
+
+| Key | Meaning | Default |
+|---|---|---|
+| `toggleHighlight` | Turns the cursor highlighter on/off | `^+F8` |
+| `moveMousePos` | Moves the cursor to the saved position | `^Numpad4` |
+| `movePrevMousePos` | Moves the cursor to the previous position | `^Numpad7` |
+| `saveMousePos` | Saves the current cursor position | `^Numpad6` |
+| `handlePause` | Pauses/resumes recording | `Pause` (auto-synced with OBS) |
+| `handleRecording` | Starts/stops recording | `^Numpad0` (auto-synced with OBS) |
+| `typeFromClipboard` | Types out the clipboard text | `^.` |
+
+### [Conf]
+
+Controls the size, timing, and transparency of the ring and click animation. All transparency values range from `0` (invisible) to `255` (fully opaque).
+
+| Key | Meaning | Default |
+|---|---|---|
+| `diameter` | Outer diameter of the highlighter ring, in pixels | `48` |
+| `thickness` | Thickness of the ring border, in pixels | `4` |
+| `ringTransparency` | Transparency of the ring border | `190` |
+| `circleTransparency` | Transparency of the inner fill | `170` |
+| `animTransparency` | Transparency of the click animation at the start | `255` |
+| `endTransparency` | Transparency of the click animation at the end | `0` |
+| `steps` | Number of frames in the click animation | `15` |
+| `startDiameter` | Click animation diameter at the start, in pixels | `10` |
+| `endDiameter` | Click animation diameter at the end, in pixels | `50` |
+| `animTargetFrameTime` | Target time per animation frame, in milliseconds | `16.67` |
+| `padding` | Gap between the ring and the inner fill, in pixels | `3` |
+
+### [Colors]
+
+Colors use ARGB hexadecimal format: `0xAARRGGBB`, where `AA` is opacity (`00`–`FF`) and `RR`/`GG`/`BB` are the red, green, and blue components.
+
+| Key | Meaning | Default |
+|---|---|---|
+| `defaultBack` | Fill color when no button is pressed | `0x00FFFFFF` (transparent) |
+| `defaultBorder` | Ring color when no button is pressed | `0xFF00FFFF` (cyan) |
+| `leftBack` | Fill color on left click | `0xFFFF0000` (red) |
+| `leftBorder` | Ring color on left click | `0xFF00FFFF` (cyan) |
+| `middleBack` | Fill color on middle click | `0xFF00FFFF` (cyan) |
+| `middleBorder` | Ring color on middle click | `0xFFFF00FF` (magenta) |
+| `rightBack` | Fill color on right click | `0xFF00FF00` (green) |
+| `rightBorder` | Ring color on right click | `0xFFFF0000` (red) |
+
 ## Troubleshooting
 
 ### The highlighter does not appear
