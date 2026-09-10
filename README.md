@@ -59,16 +59,6 @@ src/
 
 Run `src/OBS-Cursor-Tools.ahk` with AutoHotkey v2. The main script includes the files in `src/lib/` by name, so renaming or moving them without updating the `#Include` lines will prevent the source version from starting.
 
-## GitHub Actions builds
-
-The repository builds both architectures automatically with the workflow in `.github/workflows/main.yml`. Pushing a version tag that starts with `v` (for example, `v1.1`) builds the source with AutoHotkey v2 and publishes these files to the corresponding GitHub Release:
-
-```text
-OBS-Cursor-Tools-x64.exe
-OBS-Cursor-Tools-x32.exe
-```
-
-The workflow uses `src/OBS-Cursor-Tools.ahk` as the entry script and `src/app_icon.ico` as the executable icon. The release contains the compiled executables; the source-only `src/lib/` directory is not required beside a compiled executable.
 
 ## Quick start
 
