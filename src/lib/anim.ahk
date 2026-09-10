@@ -1,64 +1,74 @@
 #Requires AutoHotkey v2
 
+CircleCenterDelta(currDiameter) => (Conf.diameter - currDiameter) // 2
+
 AnimateCircle(buttonType, x, y) {
-  static activeAnimations := Map()
+	static activeAnimations := Map()
 
-  if (activeAnimations.Has(buttonType)) {
-    try app.animCircles[buttonType].Hide()
-    SetTimer(activeAnimations[buttonType].timerFunc, 0)
-    activeAnimations.Delete(buttonType)
-  }
+	if (activeAnimations.Has(buttonType)) {
+		try app.animCircles[buttonType].Hide()
+		SetTimer(activeAnimations[buttonType].timerFunc, 0)
+		activeAnimations.Delete(buttonType)
+	}
 
-  if (!buttonType || !colors.Has(buttonType))
-    return
+	if (!buttonType || !colors.Has(buttonType))
+		return
 
-  animStep := 1
-  circle := app.animCircles[buttonType]
+	if (!colors[buttonType].showFill)
+		return
 
-  initialOffset := Conf.offset + (Conf.diameter - Conf.startDiameter) // 2
-  circle.Update(Conf.startDiameter, Conf.startTransparency)
-  circle.Show(x + initialOffset, y + initialOffset)
+	steps := Max(Conf.steps, 1)
+	animStep := 1
+	lastTime := A_TickCount
+	circle := app.animCircles[buttonType]
 
-  animationTimer() {
-    static lastTime := A_TickCount
-    currTime := A_TickCount
+	initialDelta := CircleCenterDelta(Conf.startDiameter)
+	try {
+		circle.Update(Conf.startDiameter, Conf.startTransparency)
+		circle.Show(x + Conf.offsetFinalX + initialDelta, y + Conf.offsetFinalY + initialDelta)
+	}
 
-    if (currTime - lastTime < Conf.animTargetFrameTime && animStep > 1)
-      return
+	animationTimer() {
+		currTime := A_TickCount
 
-    if (animStep > Conf.steps) {
-      try circle.Hide()
-      SetTimer(animationTimer, 0)
-      activeAnimations.Delete(buttonType)
-      return
-    }
+		if (currTime - lastTime < Conf.animTargetFrameTime && animStep > 1)
+			return
 
-    progress := animStep / Conf.steps
-    easedProgress := progress * progress
+		if (animStep > steps) {
+			try circle.Hide()
+			SetTimer(animationTimer, 0)
+			activeAnimations.Delete(buttonType)
+			return
+		}
 
-    currDiameter := Floor(Conf.startDiameter + easedProgress * (Conf.endDiameter - Conf.startDiameter))
-    currDiameter := Max(currDiameter, 1)
-    currOffset := Conf.offset + (Conf.diameter - currDiameter) // 2
+		progress := animStep / steps
+		easedProgress := progress * progress
 
-    if (animStep > Conf.steps * 0.75) {
-      fadeProgress := (animStep - Conf.steps * 0.75) / (Conf.steps * 0.25)
-      currTransparency := Round(Conf.startTransparency - fadeProgress * (Conf.startTransparency - Conf.endTransparency))
-      currTransparency := Max(currTransparency, Conf.endTransparency)
-    } else {
-      currTransparency := Conf.startTransparency
-    }
+		currDiameter := Floor(Conf.startDiameter + easedProgress * (Conf.endDiameter - Conf.startDiameter))
+		currDiameter := Max(currDiameter, 1)
+		currDelta := CircleCenterDelta(currDiameter)
 
-    try {
-      circle.Update(currDiameter, currTransparency)
-      circle.Show(x + currOffset, y + currOffset)
-    }
+		fadeStartStep := steps * 0.75
+		fadeRangeSteps := steps * 0.25
+		if (animStep > fadeStartStep) {
+			fadeProgress := (animStep - fadeStartStep) / fadeRangeSteps
+			currTransparency := Round(Conf.startTransparency - fadeProgress * (Conf.startTransparency - Conf.endTransparency))
+			currTransparency := Max(currTransparency, Conf.endTransparency)
+		} else {
+			currTransparency := Conf.startTransparency
+		}
 
-    lastTime := currTime
-    animStep++
-  }
+		try {
+			circle.Update(currDiameter, currTransparency)
+			circle.Show(x + Conf.offsetFinalX + currDelta, y + Conf.offsetFinalY + currDelta)
+		}
 
-  activeAnimations[buttonType] := { timerFunc: animationTimer }
+		lastTime := currTime
+		animStep++
+	}
 
-  animationTimer()
-  SetTimer(animationTimer, 10)
+	activeAnimations[buttonType] := { timerFunc: animationTimer }
+
+	animationTimer()
+	SetTimer(animationTimer, Max(Conf.animTargetFrameTime, 1))
 }

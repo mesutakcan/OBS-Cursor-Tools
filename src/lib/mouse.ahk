@@ -1,23 +1,20 @@
 #Requires AutoHotkey v2
 
-saveMousePos() {
-	global x, y
-	MouseGetPos(&x, &y)
-	State.mousePosHistory.Push([x, y])
+saveMousePos(notify := true) {
+	MouseGetPos(&posX, &posY)
+	State.mousePosHistory.Push([posX, posY])
 	if (State.mousePosHistory.Length > State.mousePosLength) {
 		State.mousePosHistory.RemoveAt(1)
 	}
 	State.prevPosIndex := State.mousePosHistory.Length
-	ShowMessage("Position saved!`n(" . State.mousePosHistory.Length . ")", "0b60a5", "ffffff", 175, 1500)
+	if notify && Conf.showMousePosNotifications
+		ShowMessage("Position saved!`n(" . State.mousePosHistory.Length . ")", "0b60a5", "ffffff", 175, 1500)
 }
 
 moveMousePos() {
-	global x, y
 	if (State.mousePosHistory.Length > 0) {
 		pos := State.mousePosHistory[State.mousePosHistory.Length]
-		x := pos[1]
-		y := pos[2]
-		MouseMove(x, y, 5)
+		MouseMove(pos[1], pos[2], 5)
 		State.prevPosIndex := Max(0, State.mousePosHistory.Length - 1)
 	}
 }
@@ -31,40 +28,28 @@ movePrevMousePos() {
 	}
 	pos := State.mousePosHistory[State.prevPosIndex]
 	MouseMove(pos[1], pos[2], 5)
-	ShowMessage("Position: (" . State.prevPosIndex . ")", "a7b900", "ffffff", 200, 1200)
+	if Conf.showMousePosNotifications
+		ShowMessage("Position: (" . State.prevPosIndex . ")", "a7b900", "ffffff", 200, 1200)
 	newIdx := Mod(State.prevPosIndex - 1, State.mousePosHistory.Length)
 	State.prevPosIndex := newIdx ? newIdx : State.mousePosHistory.Length
 }
 
-HandleButtonUp(currentCircle, params, mouseX, mouseY) {
-	HideRingsOnly()
-	HideCirclesOnly()
+HandleButtonUp(currentCircle, mouseX, mouseY) {
 	if (currentCircle != "default" && State.hl) {
 		capturedCircle := currentCircle
 		capturedX := mouseX
 		capturedY := mouseY
 		SetTimer(() => AnimateCircle(capturedCircle, capturedX, capturedY), -1)
 	}
-	app.rings["default"].Show(params*)
-	return "default"
 }
 
-HandleButtonDown(wParam, currentCircle, params) {
+CircleForButton(wParam) {
 	switch wParam {
-		case 0x201: currentCircle := "l"
-		case 0x204: currentCircle := "r"
-		case 0x207: currentCircle := "m"
-		default: currentCircle := "default"
+		case 0x201: return "l"
+		case 0x204: return "r"
+		case 0x207: return "m"
+		default: return "default"
 	}
-	HideRingsOnly()
-	HideCirclesOnly()
-	if (currentCircle != "default" && State.hl) {
-		ShowAtomic([
-			[app.rings[currentCircle], params[1], params[2]],
-			[app.circles[currentCircle], params[1] + Conf.circlePositionOffset, params[2] + Conf.circlePositionOffset]
-		])
-	}
-	return currentCircle
 }
 
 global RenderState := { x: 0, y: 0, circle: "default", dirty: false }
@@ -85,16 +70,14 @@ LowLevelMouseProc(nCode, wParam, lParam) {
 			RenderState.y := mouseY
 			RenderState.dirty := true
 		case 0x201, 0x207, 0x204:
-			params := [mouseX + Conf.offset, mouseY + Conf.offset]
-			currentCircle := HandleButtonDown(wParam, currentCircle, params)
+			currentCircle := CircleForButton(wParam)
 			RenderState.circle := currentCircle
 			RenderState.x := mouseX
 			RenderState.y := mouseY
 			RenderState.dirty := true
 		case 0x202, 0x208, 0x205:
-			params := [mouseX + Conf.offset, mouseY + Conf.offset]
 			capturedCircle := currentCircle
-			SetTimer(() => HandleButtonUp(capturedCircle, params, mouseX, mouseY), -1)
+			SetTimer(() => HandleButtonUp(capturedCircle, mouseX, mouseY), -1)
 			currentCircle := "default"
 			RenderState.circle := "default"
 			RenderState.dirty := true
@@ -105,29 +88,28 @@ LowLevelMouseProc(nCode, wParam, lParam) {
 
 RenderLoop() {
 	static lastShownCircle := "default"
-	static lastParams := [0, 0]
+	static lastX := -9999
+	static lastY := -9999
 
 	if !RenderState.dirty
 		return
 
-	params := [RenderState.x + Conf.offset, RenderState.y + Conf.offset]
+	curX := RenderState.x + Conf.offsetFinalX
+	curY := RenderState.y + Conf.offsetFinalY
 	circleToShow := RenderState.circle
 
-	if (lastParams[1] != params[1] || lastParams[2] != params[2] || lastShownCircle != circleToShow) {
+	if (lastX != curX || lastY != curY || lastShownCircle != circleToShow) {
 		if (lastShownCircle != circleToShow) {
 			app.rings[lastShownCircle].Hide()
 			HideCirclesOnly()
 		}
-		if (circleToShow != "default") {
-			ShowAtomic([
-				[app.rings[circleToShow], params[1], params[2]],
-				[app.circles[circleToShow], params[1] + Conf.circlePositionOffset, params[2] + Conf.circlePositionOffset]
-			])
-		} else {
-			app.rings[circleToShow].Show(params*)
-		}
+		ShowAtomic([
+			[app.rings[circleToShow], curX, curY],
+			[app.circles[circleToShow], curX + Conf.circlePositionOffset, curY + Conf.circlePositionOffset]
+		])
 		lastShownCircle := circleToShow
-		lastParams := params.Clone()
+		lastX := curX
+		lastY := curY
 	}
 
 	RenderState.dirty := false
@@ -141,22 +123,23 @@ ToggleHighlight() {
 }
 
 showHighlight(show := true) {
-	global x, y
 	if State.Hook {
-		State.Hook.__Delete()
+		State.Hook.Unhook()
 		State.Hook := ""
 		SetTimer(RenderLoop, 0)
 	}
 	HideAllGraphics()
 	if !show || !State.hl
 		return
-	MouseGetPos(&x, &y)
+	MouseGetPos(&curX, &curY)
 	State.Hook := WindowsHook(14, LowLevelMouseProc)
-	RenderState.x := x
-	RenderState.y := y
+	RenderState.x := curX
+	RenderState.y := curY
 	RenderState.circle := "default"
 	RenderState.dirty := false
 	SetTimer(RenderLoop, 8)
-	app.rings["default"].Show(x + Conf.offset, y + Conf.offset)
-	State.lastUpdate := A_TickCount
+	ShowAtomic([
+		[app.rings["default"], curX + Conf.offsetFinalX, curY + Conf.offsetFinalY],
+		[app.circles["default"], curX + Conf.offsetFinalX + Conf.circlePositionOffset, curY + Conf.offsetFinalY + Conf.circlePositionOffset]
+	])
 }
