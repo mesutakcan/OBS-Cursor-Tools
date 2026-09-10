@@ -149,9 +149,9 @@ The buttons at the bottom behave as follows:
 
 Profiles are stored in a `profiles` folder next to the script or executable. The folder is created when the first profile is saved.
 
-[![Settings SS 1](docs\settings_ss_1.png)](docs\settings_ss_1.png)
-[![Settings SS 2](docs\settings_ss_2.png)](docs\settings_ss_2.png)
-[![Settings SS 3](docs\settings_ss_3.png)](docs\settings_ss_3.png)
+[![Settings SS 1](docs/settings_ss_1.png)](docs/settings_ss_1.png)
+[![Settings SS 2](docs/settings_ss_2.png)](docs/settings_ss_2.png)
+[![Settings SS 3](docs/settings_ss_3.png)](docs/settings_ss_3.png)
 
 ## Changing settings manually
 
