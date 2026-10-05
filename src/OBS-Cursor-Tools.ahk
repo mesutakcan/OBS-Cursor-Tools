@@ -2,15 +2,16 @@
 OBS Cursor Tools is a lightweight AutoHotkey application that enhances OBS Studio recordings with cursor highlighting,
 click animations, and recording shortcuts.
 ---------------------
-v1.1 - 2026-09-10
+v1.2 - 2026-10-05
 Mesut Akcan
 https://github.com/mesutakcan/OBS-Cursor-Tools
 */
 
 ;@Ahk2Exe-SetDescription OBS Cursor Tools
-;@Ahk2Exe-SetFileVersion 1.1
+;@Ahk2Exe-SetFileVersion 1.2
 ;@Ahk2Exe-SetCopyright ©2026 Mesut Akcan
 ;@Ahk2Exe-SetMainIcon app_icon.ico
+;@Ahk2Exe-AddResource app_icon_pause.ico, 206
 
 #Requires AutoHotkey v2
 #SingleInstance Force
@@ -30,12 +31,46 @@ CoordMode("Mouse", "Screen"), CoordMode("Pixel", "Screen"), CoordMode("ToolTip",
 SetKeyDelay(30)
 ProcessSetPriority("AboveNormal")
 
-try TraySetIcon("app_icon.ico")
+SetWindowIcon(hwnd) {
+	static WM_SETICON := 0x0080
+	static IMAGE_ICON := 1
+	static LR_LOADFROMFILE := 0x0010
+	static LR_DEFAULTSIZE := 0x0040
+	static hBig := 0, hSmall := 0
+
+	if !hBig {
+		if A_IsCompiled {
+			hInst := DllCall("GetModuleHandle", "Ptr", 0, "Ptr")
+			hBig := DllCall("LoadImageW", "Ptr", hInst, "Ptr", 159, "UInt", IMAGE_ICON,
+				"Int", 0, "Int", 0, "UInt", LR_DEFAULTSIZE, "Ptr")
+			hSmall := DllCall("LoadImageW", "Ptr", hInst, "Ptr", 159, "UInt", IMAGE_ICON,
+				"Int", DllCall("GetSystemMetrics", "Int", 49), "Int", DllCall("GetSystemMetrics", "Int", 50),
+				"UInt", 0, "Ptr")
+		} else {
+			hBig := DllCall("LoadImageW", "Ptr", 0, "Str", MAINICON, "UInt", IMAGE_ICON,
+				"Int", 0, "Int", 0, "UInt", LR_LOADFROMFILE | LR_DEFAULTSIZE, "Ptr")
+			hSmall := DllCall("LoadImageW", "Ptr", 0, "Str", MAINICON, "UInt", IMAGE_ICON,
+				"Int", DllCall("GetSystemMetrics", "Int", 49), "Int", DllCall("GetSystemMetrics", "Int", 50),
+				"UInt", LR_LOADFROMFILE, "Ptr")
+		}
+	}
+
+	if hBig
+		DllCall("SendMessage", "Ptr", hwnd, "UInt", WM_SETICON, "Ptr", 1, "Ptr", hBig)
+	if hSmall
+		DllCall("SendMessage", "Ptr", hwnd, "UInt", WM_SETICON, "Ptr", 0, "Ptr", hSmall)
+}
+
+if !A_IsCompiled {
+	MAINICON := A_ScriptDir "\app_icon.ico"
+	PAUSEICON := A_ScriptDir "\app_icon_pause.ico"
+	try TraySetIcon(MAINICON, , true)
+	try SetWindowIcon(A_ScriptHwnd)
+}
 
 global app := {
-	ver: "1.1",
+	ver: "1.2",
 	name: "OBS Cursor Tools",
-	author: "Mesut Akcan",
 	github: "https://github.com/mesutakcan/OBS-Cursor-Tools",
 	iniFile: A_ScriptDir "\settings.ini",
 	rings: Map(),
@@ -58,18 +93,21 @@ global DllCall_CallNextHookEx := DllCall.Bind("CallNextHookEx", "Ptr", 0, "Int",
 global State := {
 	recording: false,
 	paused: false,
-	hl: Conf.showOnStartup,
-	toggle_used: false,
+	hl: false,
+	alwaysShow: Conf.showOnStartup ? true : false,
+	hlOverride: -1,
 	Hook: "",
 	mousePosHistory: [],
 	mousePosLength: 5,
 	prevPosIndex: 0,
-	programPaused: false,
-	pausedPrevHl: false
+	programPaused: false
 }
 
 IniReadInt(section, key, defaultValue) {
-	return Integer(IniRead(app.iniFile, section, key, defaultValue))
+	val := ParseIntSafe(IniRead(app.iniFile, section, key, defaultValue), defaultValue)
+	if (section = "Conf" && ConfRanges().Has(key))
+		val := ClampConfValue(key, val)
+	return val
 }
 
 IniReadFloat(section, key, defaultValue) {
@@ -84,8 +122,9 @@ RegisterHotkeys()
 
 StartGDIPlus()
 InitGraphics()
-showHighlight(true)
+RefreshHighlight()
 UpdateTrayMenu()
+SetTimer(PrewarmAnimCache, -1)
 
 HandlePause() {
 	if !State.recording
@@ -93,16 +132,14 @@ HandlePause() {
 	State.paused := !State.paused
 	if State.paused {
 		saveMousePos(false)
-		showHighlight(false)
+		RefreshHighlight()
 		if Conf.showRecordingNotifications
 			SetTimer(() => ShowMessage("⏸ Recording paused!", "ffee00", "009e00", 175, 1000), -1000)
 	} else {
 		moveMousePos()
-		if State.hl {
-			showHighlight(true)
-			if Conf.showRecordingNotifications
-				ShowMessage("▶ Recording resumed!", "ff0000", "ffee00", 175, 1000)
-		}
+		RefreshHighlight()
+		if Conf.showRecordingNotifications
+			ShowMessage("▶ Recording resumed!", "ff0000", "ffee00", 175, 1000)
 	}
 }
 
@@ -116,19 +153,15 @@ HandleRecording() {
 
 	State.recording := !State.recording
 	if State.recording {
-		if !State.toggle_used {
-			State.hl := true
-		}
 		State.paused := false
 		if Conf.showRecordingNotifications
 			ShowMessage("▶ Recording started!", "ff0000", "ffffff", 175, 1000)
 		moveMousePos()
-		if State.hl {
-			showHighlight(true)
-		}
+		RefreshHighlight()
 	} else {
 		saveMousePos(false)
-		showHighlight(false)
+		State.hlOverride := -1
+		RefreshHighlight()
 		if Conf.showRecordingNotifications
 			SetTimer(() => ShowMessage("⏹ Recording stopped!", "008f00", "ffffff", 175, 2000), -1000)
 	}
@@ -180,6 +213,9 @@ UpdateTrayMenu() {
 		A_TrayMenu.Check(mnuSuspendHotkeys)
 	else
 		A_TrayMenu.UnCheck(mnuSuspendHotkeys)
+
+	if (!A_IsCompiled)
+		try TraySetIcon(A_IsSuspended ? PAUSEICON : MAINICON, , true)
 }
 
 ToggleProgramPause(*) {
@@ -187,16 +223,8 @@ ToggleProgramPause(*) {
 		return
 
 	State.programPaused := !State.programPaused
-	if State.programPaused {
-		State.pausedPrevHl := State.hl
-		State.hl := false
-		showHighlight(false)
-		Suspend(true)
-	} else {
-		Suspend(false)
-		State.hl := State.pausedPrevHl
-		showHighlight(State.hl)
-	}
+	Suspend(State.programPaused)
+	RefreshHighlight()
 	UpdateTrayMenu()
 }
 
@@ -207,8 +235,7 @@ ToggleSuspendHotkeys(*) {
 	Suspend(-1)
 	if !A_IsSuspended && State.programPaused {
 		State.programPaused := false
-		State.hl := State.pausedPrevHl
-		showHighlight(State.hl)
+		RefreshHighlight()
 	}
 	UpdateTrayMenu()
 }
@@ -217,7 +244,7 @@ ShowHotkeys() {
 	text := "Assigned Hotkeys:`n`n"
 	text .= "Toggle Highlighter:`t" HotkeyPlus.FormatKeyToText(HK.toggleHighlight) "`n"
 	text .= "Save Mouse Position:`t" HotkeyPlus.FormatKeyToText(HK.saveMousePos) "`n"
-	text .= "Move to Saved Pos:`t" HotkeyPlus.FormatKeyToText(HK.moveMousePos) "`n"
+	text .= "Move to Last Pos:`t" HotkeyPlus.FormatKeyToText(HK.moveMousePos) "`n"
 	text .= "Move to Previous Pos:`t" HotkeyPlus.FormatKeyToText(HK.movePrevMousePos) "`n"
 	text .= "Start/Stop Recording:`t" HotkeyPlus.FormatKeyToText(HK.handleRecording) "`n"
 	text .= "Pause/Resume Recording:`t" HotkeyPlus.FormatKeyToText(HK.handlePause) "`n"
@@ -238,10 +265,8 @@ RegisterHotkeys() {
 
 RegisterHotkeyWithNumpadAlt(hk, callback) {
 	keyPart := RegExReplace(hk, "^[~*^!+#]*", "")
-	if (Trim(keyPart) = "") {
-		MsgBox("A hotkey is empty or invalid and was skipped.`nPlease check your Hotkeys settings.", app.name, "48")
+	if (Trim(keyPart) = "")
 		return
-	}
 	try {
 		Hotkey(hk, callback)
 	} catch as e {
@@ -272,68 +297,27 @@ RegisterHotkeyWithNumpadAlt(hk, callback) {
 LoadSettings() {
 	global colors, Conf, HK
 
-	HK := {
-		toggleHighlight: IniRead(app.iniFile, "Hotkeys", "toggleHighlight", "^+F8"),
-		moveMousePos: IniRead(app.iniFile, "Hotkeys", "moveMousePos", "^Numpad4"),
-		movePrevMousePos: IniRead(app.iniFile, "Hotkeys", "movePrevMousePos", "^Numpad7"),
-		saveMousePos: IniRead(app.iniFile, "Hotkeys", "saveMousePos", "^Numpad6"),
-		handlePause: IniRead(app.iniFile, "Hotkeys", "handlePause", "Pause"),
-		handleRecording: IniRead(app.iniFile, "Hotkeys", "handleRecording", "^Numpad0"),
-		typeFromClipboard: IniRead(app.iniFile, "Hotkeys", "typeFromClipboard", "^.")
-	}
+	defHK := DefaultHotkeys()
+	HK := {}
+	for key in HotkeyKeys()
+		HK.%key% := IniRead(app.iniFile, "Hotkeys", key, defHK[key])
 
-	static DefColors := {
-		default: { back: "0x00FFFFFF", border: "0xFF00FFFF" },
-		l: { back: "0xFFFF0000", border: "0xFF00FFFF" },
-		m: { back: "0xFF00FFFF", border: "0xFFFF00FF" },
-		r: { back: "0xFF00FF00", border: "0xFFFF0000" }
-	}
-
-	colors := Map(
-		"default", {
-			back: IniRead(app.iniFile, "Colors", "defaultBack", DefColors.default.back),
-			border: IniRead(app.iniFile, "Colors", "defaultBorder", DefColors.default.border),
-			showBorder: IniRead(app.iniFile, "Colors", "defaultShowBorder", "1") = "1",
-			showFill: IniRead(app.iniFile, "Colors", "defaultShowFill", "0") = "1"
-		},
-		"l", {
-			back: IniRead(app.iniFile, "Colors", "leftBack", DefColors.l.back),
-			border: IniRead(app.iniFile, "Colors", "leftBorder", DefColors.l.border),
-			showBorder: IniRead(app.iniFile, "Colors", "leftShowBorder", "1") = "1",
-			showFill: IniRead(app.iniFile, "Colors", "leftShowFill", "1") = "1"
-		},
-		"m", {
-			back: IniRead(app.iniFile, "Colors", "middleBack", DefColors.m.back),
-			border: IniRead(app.iniFile, "Colors", "middleBorder", DefColors.m.border),
-			showBorder: IniRead(app.iniFile, "Colors", "middleShowBorder", "1") = "1",
-			showFill: IniRead(app.iniFile, "Colors", "middleShowFill", "1") = "1"
-		},
-		"r", {
-			back: IniRead(app.iniFile, "Colors", "rightBack", DefColors.r.back),
-			border: IniRead(app.iniFile, "Colors", "rightBorder", DefColors.r.border),
-			showBorder: IniRead(app.iniFile, "Colors", "rightShowBorder", "1") = "1",
-			showFill: IniRead(app.iniFile, "Colors", "rightShowFill", "1") = "1"
+	defColors := DefaultColors()
+	defFlags := DefaultColorFlags()
+	colors := Map()
+	for circleKey in ["default", "l", "m", "r"] {
+		colors[circleKey] := {
+			back: IniRead(app.iniFile, "Colors", ColorIniKey(circleKey, "back"), "0xFF" defColors[circleKey "_back"]),
+			border: IniRead(app.iniFile, "Colors", ColorIniKey(circleKey, "border"), "0xFF" defColors[circleKey "_border"]),
+			showBorder: IniRead(app.iniFile, "Colors", ColorIniKey(circleKey, "showBorder"), String(defFlags[circleKey "_showBorder"])) = "1",
+			showFill: IniRead(app.iniFile, "Colors", ColorIniKey(circleKey, "showFill"), String(defFlags[circleKey "_showFill"])) = "1"
 		}
-	)
-
-	Conf := {
-		diameter: IniReadInt("Conf", "diameter", 48),
-		thickness: IniReadInt("Conf", "thickness", 4),
-		ringTransparency: IniReadInt("Conf", "ringTransparency", 190),
-		circleTransparency: IniReadInt("Conf", "circleTransparency", 170),
-		animTransparency: IniReadInt("Conf", "animTransparency", 255),
-		endTransparency: IniReadInt("Conf", "endTransparency", 0),
-		steps: IniReadInt("Conf", "steps", 15),
-		startDiameter: IniReadInt("Conf", "startDiameter", 10),
-		endDiameter: IniReadInt("Conf", "endDiameter", 50),
-		animTargetFrameTime: IniReadFloat("Conf", "animTargetFrameTime", 16.67),
-		offsetX: IniReadInt("Conf", "offsetX", 0),
-		offsetY: IniReadInt("Conf", "offsetY", 0),
-		showOnStartup: IniReadInt("Conf", "showOnStartup", 0),
-		showRecordingNotifications: IniReadInt("Conf", "showRecordingNotifications", 1),
-		showMousePosNotifications: IniReadInt("Conf", "showMousePosNotifications", 1),
-		syncHotkeysFromOBS: IniReadInt("Conf", "syncHotkeysFromOBS", 1)
 	}
+
+	defConf := DefaultConf()
+	Conf := {}
+	for key in ConfKeys()
+		Conf.%key% := (key = "animTargetFrameTime") ? IniReadFloat("Conf", key, defConf[key]) : IniReadInt("Conf", key, defConf[key])
 
 	Conf.ringMargin := 2
 	Conf.offset := -(Conf.diameter // 2) - Conf.ringMargin
@@ -355,7 +339,7 @@ CreateTrayMenu() {
 	A_TrayMenu.Add()
 	A_TrayMenu.Add(mnuHl, (*) => ToggleHighlight())
 	A_TrayMenu.Add("Save mouse position`t" HotkeyPlus.FormatKeyToText(HK.saveMousePos), (*) => saveMousePos())
-	A_TrayMenu.Add("Move mouse to saved position`t" HotkeyPlus.FormatKeyToText(HK.moveMousePos), (*) => moveMousePos())
+	A_TrayMenu.Add("Move mouse to last position`t" HotkeyPlus.FormatKeyToText(HK.moveMousePos), (*) => moveMousePos())
 	A_TrayMenu.Add("Move mouse to previous position`t" HotkeyPlus.FormatKeyToText(HK.movePrevMousePos), (*) => movePrevMousePos())
 	A_TrayMenu.Add()
 	A_TrayMenu.Add("Start/stop recording`t" HotkeyPlus.FormatKeyToText(HK.handleRecording), (*) => HandleRecording())
@@ -381,63 +365,66 @@ ShowAbout(*) {
 
 OnExit(CleanupResources)
 
+ReadOBSHotkeys() {
+	result := { error: "", rec: "", pz: "", problems: [] }
+	obsBase := A_AppData "\obs-studio\basic"
+	profileDir := GetActiveOBSProfileDir(obsBase)
+	if !profileDir {
+		result.error := "OBS profile folder was not found"
+		return result
+	}
+
+	iniPath := obsBase "\profiles\" profileDir "\basic.ini"
+	if !FileExist(iniPath) {
+		result.error := "OBS profile file was not found (" profileDir ")"
+		return result
+	}
+
+	startCombo := ParseOBSHotkey(IniRead(iniPath, "Hotkeys", "OBSBasic.StartRecording", ""))
+	stopCombo := ParseOBSHotkey(IniRead(iniPath, "Hotkeys", "OBSBasic.StopRecording", ""))
+	pauseCombo := ParseOBSHotkey(IniRead(iniPath, "Hotkeys", "OBSBasic.PauseRecording", ""))
+	unpauseCombo := ParseOBSHotkey(IniRead(iniPath, "Hotkeys", "OBSBasic.UnpauseRecording", ""))
+
+	if (startCombo && stopCombo && startCombo != stopCombo)
+		result.problems.Push("'Start Recording' (" startCombo ") and 'Stop Recording' (" stopCombo ") use different keys in OBS.")
+	if (pauseCombo && unpauseCombo && pauseCombo != unpauseCombo)
+		result.problems.Push("'Pause Recording' (" pauseCombo ") and 'Unpause Recording' (" unpauseCombo ") use different keys in OBS.")
+
+	result.rec := startCombo ? startCombo : stopCombo
+	result.pz := pauseCombo ? pauseCombo : unpauseCombo
+	return result
+}
+
 SyncOBSHotkeys(silent := false) {
 	global HK
 	try {
-		obsBase := A_AppData "\obs-studio\basic"
-		profileDir := GetActiveOBSProfileDir(obsBase)
-		if !profileDir {
+		obs := ReadOBSHotkeys()
+		if obs.error {
 			if !silent
-				AnnounceActiveHotkeys("OBS profile folder was not found; values from settings.ini will be used.")
+				AnnounceActiveHotkeys(obs.error "; values from settings.ini will be used.")
 			return false
 		}
 
-		iniPath := obsBase "\profiles\" profileDir "\basic.ini"
-		if !FileExist(iniPath) {
-			if !silent
-				AnnounceActiveHotkeys("OBS profile file was not found (" profileDir " ); values from settings.ini will be used.")
-			return false
-		}
-
-		startCombo := ParseOBSHotkey(IniRead(iniPath, "Hotkeys", "OBSBasic.StartRecording", ""))
-		stopCombo := ParseOBSHotkey(IniRead(iniPath, "Hotkeys", "OBSBasic.StopRecording", ""))
-		pauseCombo := ParseOBSHotkey(IniRead(iniPath, "Hotkeys", "OBSBasic.PauseRecording", ""))
-		unpauseCombo := ParseOBSHotkey(IniRead(iniPath, "Hotkeys", "OBSBasic.UnpauseRecording", ""))
-
-		problems := []
-
-		if (startCombo && stopCombo && startCombo != stopCombo) {
-			problems.Push("In OBS, 'Start Recording' (" startCombo ") and`n'Stop Recording' (" stopCombo
-				") are assigned to different keys.`nBoth must use the SAME key for this script to work.")
-		}
-		if (pauseCombo && unpauseCombo && pauseCombo != unpauseCombo) {
-			problems.Push("In OBS, 'Pause Recording' (" pauseCombo ") and`n'Unpause Recording' (" unpauseCombo
-				") are assigned to different keys.`nBoth must use the SAME key for this script to work.")
-		}
-
-		if problems.Length {
+		if obs.problems.Length {
 			msg := "There is an OBS hotkey mismatch that needs to be fixed:`n`n"
-			for p in problems
+			for p in obs.problems
 				msg .= "  - " p "`n"
-			msg .= "`nFix it in OBS → Settings → Hotkeys.`nUntil then, the script will continue using the previous values from settings.ini."
+			msg .= "`nBoth keys in each pair must be the SAME for this script to work.`nFix it in OBS → Settings → Hotkeys.`nUntil then, the script will continue using the previous values from settings.ini."
 			MsgBox(msg, "OBS Hotkey Mismatch", "48")
 			if !silent
 				AnnounceActiveHotkeys("Previous values from settings.ini are being used because of the OBS mismatch.")
 			return false
 		}
 
-		recCombo := startCombo ? startCombo : stopCombo
-		pzCombo := pauseCombo ? pauseCombo : unpauseCombo
-
 		changed := false
-		if (recCombo && recCombo != HK.handleRecording) {
-			HK.handleRecording := recCombo
-			IniWrite(recCombo, app.iniFile, "Hotkeys", "handleRecording")
+		if (obs.rec && obs.rec != HK.handleRecording) {
+			HK.handleRecording := obs.rec
+			IniWrite(obs.rec, app.iniFile, "Hotkeys", "handleRecording")
 			changed := true
 		}
-		if (pzCombo && pzCombo != HK.handlePause) {
-			HK.handlePause := pzCombo
-			IniWrite(pzCombo, app.iniFile, "Hotkeys", "handlePause")
+		if (obs.pz && obs.pz != HK.handlePause) {
+			HK.handlePause := obs.pz
+			IniWrite(obs.pz, app.iniFile, "Hotkeys", "handlePause")
 			changed := true
 		}
 
@@ -529,20 +516,19 @@ ConvertOBSKeyName(obsKey) {
 	static keyMap := Map(
 		"NUM0", "Numpad0", "NUM1", "Numpad1", "NUM2", "Numpad2", "NUM3", "Numpad3", "NUM4", "Numpad4",
 		"NUM5", "Numpad5", "NUM6", "Numpad6", "NUM7", "Numpad7", "NUM8", "Numpad8", "NUM9", "Numpad9",
-		"F1", "F1", "F2", "F2", "F3", "F3", "F4", "F4", "F5", "F5", "F6", "F6", "F7", "F7", "F8", "F8",
-		"F9", "F9", "F10", "F10", "F11", "F11", "F12", "F12",
 		"PAUSE", "Pause", "INSERT", "Insert", "DELETE", "Delete", "HOME", "Home", "END", "End",
 		"PAGEUP", "PgUp", "PAGEDOWN", "PgDn", "SPACE", "Space", "ESCAPE", "Escape", "TAB", "Tab",
 		"NUMASTERISK", "NumpadMult", "NUMSLASH", "NumpadDiv", "NUMPLUS", "NumpadAdd", "NUMMINUS", "NumpadSub",
+		"NUMPERIOD", "NumpadDot", "PRINT", "PrintScreen", "SCROLLLOCK", "ScrollLock", "NUMLOCK", "NumLock", "CAPSLOCK", "CapsLock",
 		"LEFT", "Left", "RIGHT", "Right", "UP", "Up", "DOWN", "Down",
 		"BACKSPACE", "Backspace", "RETURN", "Enter", "ENTER", "Enter",
-		"F13", "F13", "F14", "F14", "F15", "F15", "F16", "F16", "F17", "F17", "F18", "F18",
-		"F19", "F19", "F20", "F20", "F21", "F21", "F22", "F22", "F23", "F23", "F24", "F24",
 		"PERIOD", ".", "COMMA", ",", "MINUS", "-", "EQUAL", "=", "SLASH", "/",
 		"BRACKETLEFT", "[", "BRACKETRIGHT", "]", "SEMICOLON", ";", "APOSTROPHE", "'",
 		"BACKSLASH", "\", "GRAVE", "``"
 	)
 	upper := StrUpper(obsKey)
+	if RegExMatch(upper, "^F([1-9]|1\d|2[0-4])$")
+		return upper
 	if keyMap.Has(upper)
 		return keyMap[upper]
 	if StrLen(obsKey) = 1

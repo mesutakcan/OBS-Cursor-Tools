@@ -8,16 +8,14 @@ global PREVIEW_APP_W := 210
 global PREVIEW_APP_H := 150
 global PREVIEW_COLOR_W := 440
 global PREVIEW_COLOR_H := 100
-global SettingsPrevHl := false
 global SettingsPrevSuspend := false
 global PreviewBgLevel := 43
 global HotkeyLabels := Map()
 global HotkeyWarningText := ""
 global SettingsBtnSave := ""
-global SettingsTab := ""
 
 ShowSettingsGui(*) {
-	global SettingsGuiObj, SettingsCtrls, PreviewApp, PreviewColor, SettingsPrevHl, SettingsPrevSuspend
+	global SettingsGuiObj, SettingsCtrls, PreviewApp, PreviewColor, SettingsPrevSuspend
 
 	if IsObject(SettingsGuiObj) {
 		SettingsGuiObj.Show()
@@ -26,21 +24,18 @@ ShowSettingsGui(*) {
 
 	SettingsPrevSuspend := A_IsSuspended
 	Suspend(true)
-	SettingsPrevHl := State.hl
-	State.hl := false
-	showHighlight(false)
 	UpdateTrayMenu()
 
 	SettingsCtrls := Map()
 	SettingsGuiObj := Gui("+AlwaysOnTop", app.name " - Settings")
+	RefreshHighlight()
+	SetWindowIcon(SettingsGuiObj.Hwnd)
 	SettingsGuiObj.Opt("+OwnDialogs")
 	SettingsGuiObj.SetFont("s10", "Segoe UI")
 	SettingsGuiObj.OnEvent("Close", (*) => CloseSettingsGui())
 	SettingsGuiObj.OnEvent("Escape", (*) => CloseSettingsGui())
 
-	global SettingsTab
 	tab := SettingsGuiObj.Add("Tab3", "x10 y10 w500 h457", ["Appearance", "Colors", "Hotkeys"])
-	SettingsTab := tab
 
 	tab.UseTab(3)
 	global HotkeyLabels
@@ -48,8 +43,7 @@ ShowSettingsGui(*) {
 
 	SettingsCtrls["syncHotkeysFromOBS"] := SettingsGuiObj.Add("CheckBox", "x20 y40 w460",
 		"Automatically sync Start/Stop and Pause/Resume hotkeys from OBS")
-	SettingsCtrls["syncHotkeysFromOBS"].Value := IniRead(app.iniFile, "Conf", "syncHotkeysFromOBS",
-		Conf.syncHotkeysFromOBS ? "1" : "0") = "1" ? 1 : 0
+	SettingsCtrls["syncHotkeysFromOBS"].Value := Conf.syncHotkeysFromOBS ? 1 : 0
 	SettingsCtrls["syncHotkeysFromOBS"].OnEvent("Click", (*) => UpdateSyncHotkeysState())
 
 	btnSyncNow := SettingsGuiObj.Add("Button", "x30 y64 w100 h24", "Sync Now")
@@ -60,7 +54,7 @@ ShowSettingsGui(*) {
 		["handlePause", "Pause/Resume Recording"],
 		["handleRecording", "Start/Stop Recording"],
 		["toggleHighlight", "Toggle Highlighter"],
-		["moveMousePos", "Move to Saved Position"],
+		["moveMousePos", "Move to Last Position"],
 		["movePrevMousePos", "Move to Previous Position"],
 		["saveMousePos", "Save Mouse Position"],
 		["typeFromClipboard", "Type from Clipboard"]
@@ -70,7 +64,7 @@ ShowSettingsGui(*) {
 		key := item[1], label := item[2]
 		HotkeyLabels[key] := label
 		SettingsGuiObj.Add("Text", "x30 y" y " w190", label)
-		initialVal := IniRead(app.iniFile, "Hotkeys", key, HK.%key%)
+		initialVal := HK.%key%
 		hkCtrl := SettingsGuiObj.AddHotkeyPlus("x230 y" (y - 3) " w210", initialVal)
 		hkCtrl.OnEvent("Change", (*) => UpdateHotkeyConflictWarning())
 		SettingsCtrls[key] := hkCtrl
@@ -83,68 +77,56 @@ ShowSettingsGui(*) {
 
 	tab.UseTab(1)
 
-	SettingsCtrls["showOnStartup"] := SettingsGuiObj.Add("CheckBox", "x20 y38", "Show Highlighter on Startup")
-	SettingsCtrls["showOnStartup"].Value := IniRead(app.iniFile, "Conf", "showOnStartup",
-		Conf.showOnStartup ? "1" : "0") = "1" ? 1 : 0
+	SettingsCtrls["showOnStartup"] := SettingsGuiObj.Add("CheckBox", "x20 y38", "Always show highlighter (otherwise only while recording)")
+	SettingsCtrls["showOnStartup"].Value := Conf.showOnStartup ? 1 : 0
 
 	SettingsCtrls["showRecordingNotifications"] := SettingsGuiObj.Add("CheckBox", "x20 y60",
 		"Show Recording Start/Stop/Pause Notifications")
-	SettingsCtrls["showRecordingNotifications"].Value := IniRead(app.iniFile, "Conf", "showRecordingNotifications",
-		Conf.showRecordingNotifications ? "1" : "0") = "1" ? 1 : 0
+	SettingsCtrls["showRecordingNotifications"].Value := Conf.showRecordingNotifications ? 1 : 0
 
 	SettingsCtrls["showMousePosNotifications"] := SettingsGuiObj.Add("CheckBox", "x20 y82",
 		"Show Mouse Position Save/Move Notifications")
-	SettingsCtrls["showMousePosNotifications"].Value := IniRead(app.iniFile, "Conf", "showMousePosNotifications",
-		Conf.showMousePosNotifications ? "1" : "0") = "1" ? 1 : 0
+	SettingsCtrls["showMousePosNotifications"].Value := Conf.showMousePosNotifications ? 1 : 0
 
 	SettingsGuiObj.Add("GroupBox", "x20 y110 w230 h150", "Ring")
 	PreviewApp := SettingsGuiObj.Add("Picture", "x270 y110 w" PREVIEW_APP_W " h" PREVIEW_APP_H " Border", "")
 
 	ry := 138
 	SettingsGuiObj.Add("Text", "x35 y" ry " w120", "Diameter (px)")
-	SettingsCtrls["diameter"] := AddClampedIntEdit(SettingsGuiObj, 165, ry - 3, 50,
-		IniRead(app.iniFile, "Conf", "diameter", Conf.diameter), 4, 500)
+	SettingsCtrls["diameter"] := AddClampedIntEdit(SettingsGuiObj, 165, ry - 3, 50, "diameter")
 	SettingsCtrls["diameter"].OnEvent("Change", (*) => UpdatePreviews())
 	SettingsCtrls["diameter"].OnEvent("LoseFocus", (*) => ClampThicknessToDiameter())
 	ry += 27
 	SettingsGuiObj.Add("Text", "x35 y" ry " w120", "Thickness (px)")
-	SettingsCtrls["thickness"] := AddClampedIntEdit(SettingsGuiObj, 165, ry - 3, 50,
-		IniRead(app.iniFile, "Conf", "thickness", Conf.thickness), 1, 250)
+	SettingsCtrls["thickness"] := AddClampedIntEdit(SettingsGuiObj, 165, ry - 3, 50, "thickness")
 	SettingsCtrls["thickness"].OnEvent("Change", (*) => UpdatePreviews())
 	SettingsCtrls["thickness"].OnEvent("LoseFocus", (*) => ClampThicknessToDiameter())
 	ry += 27
 	SettingsGuiObj.Add("Text", "x35 y" ry " w120", "Offset X (px)")
-	SettingsCtrls["offsetX"] := AddClampedIntEdit(SettingsGuiObj, 165, ry - 3, 50,
-		IniRead(app.iniFile, "Conf", "offsetX", Conf.offsetX), -50, 50)
+	SettingsCtrls["offsetX"] := AddClampedIntEdit(SettingsGuiObj, 165, ry - 3, 50, "offsetX")
 	SettingsCtrls["offsetX"].OnEvent("Change", (*) => UpdatePreviews())
 	ry += 27
 	SettingsGuiObj.Add("Text", "x35 y" ry " w120", "Offset Y (px)")
-	SettingsCtrls["offsetY"] := AddClampedIntEdit(SettingsGuiObj, 165, ry - 3, 50,
-		IniRead(app.iniFile, "Conf", "offsetY", Conf.offsetY), -50, 50)
+	SettingsCtrls["offsetY"] := AddClampedIntEdit(SettingsGuiObj, 165, ry - 3, 50, "offsetY")
 	SettingsCtrls["offsetY"].OnEvent("Change", (*) => UpdatePreviews())
 
 	SettingsGuiObj.Add("GroupBox", "x20 y270 w460 h185", "Animation")
 
 	ay := 298
 	SettingsGuiObj.Add("Text", "x35 y" ay " w220", "Steps")
-	SettingsCtrls["steps"] := AddClampedIntEdit(SettingsGuiObj, 270, ay - 3, 60,
-		IniRead(app.iniFile, "Conf", "steps", Conf.steps), 1, 200)
+	SettingsCtrls["steps"] := AddClampedIntEdit(SettingsGuiObj, 270, ay - 3, 60, "steps")
 	ay += 25
 	SettingsGuiObj.Add("Text", "x35 y" ay " w220", "Start Diameter (px)")
-	SettingsCtrls["startDiameter"] := AddClampedIntEdit(SettingsGuiObj, 270, ay - 3, 60,
-		IniRead(app.iniFile, "Conf", "startDiameter", Conf.startDiameter), 1, 500)
+	SettingsCtrls["startDiameter"] := AddClampedIntEdit(SettingsGuiObj, 270, ay - 3, 60, "startDiameter")
 	ay += 25
 	SettingsGuiObj.Add("Text", "x35 y" ay " w220", "End Diameter (px)")
-	SettingsCtrls["endDiameter"] := AddClampedIntEdit(SettingsGuiObj, 270, ay - 3, 60,
-		IniRead(app.iniFile, "Conf", "endDiameter", Conf.endDiameter), 1, 500)
+	SettingsCtrls["endDiameter"] := AddClampedIntEdit(SettingsGuiObj, 270, ay - 3, 60, "endDiameter")
 	ay += 25
 	SettingsGuiObj.Add("Text", "x35 y" ay " w220", "Transparency (0-255)")
-	SettingsCtrls["animTransparency"] := AddClampedIntEdit(SettingsGuiObj, 270, ay - 3, 60,
-		IniRead(app.iniFile, "Conf", "animTransparency", Conf.animTransparency), 0, 255)
+	SettingsCtrls["animTransparency"] := AddClampedIntEdit(SettingsGuiObj, 270, ay - 3, 60, "animTransparency")
 	ay += 25
 	SettingsGuiObj.Add("Text", "x35 y" ay " w220", "End Transparency (0-255)")
-	SettingsCtrls["endTransparency"] := AddClampedIntEdit(SettingsGuiObj, 270, ay - 3, 60,
-		IniRead(app.iniFile, "Conf", "endTransparency", Conf.endTransparency), 0, 255)
+	SettingsCtrls["endTransparency"] := AddClampedIntEdit(SettingsGuiObj, 270, ay - 3, 60, "endTransparency")
 	ay += 25
 	SettingsGuiObj.Add("Text", "x35 y" ay " w220", "Frame Time (ms)")
 	frameTimeRaw := IniRead(app.iniFile, "Conf", "animTargetFrameTime", Conf.animTargetFrameTime)
@@ -159,12 +141,10 @@ ShowSettingsGui(*) {
 
 	tab.UseTab(2)
 	SettingsGuiObj.Add("Text", "x30 y45 w230", "Ring Transparency (0-255)")
-	SettingsCtrls["ringTransparency"] := AddClampedIntEdit(SettingsGuiObj, 270, 42, 60,
-		IniRead(app.iniFile, "Conf", "ringTransparency", Conf.ringTransparency), 0, 255)
+	SettingsCtrls["ringTransparency"] := AddClampedIntEdit(SettingsGuiObj, 270, 42, 60, "ringTransparency")
 	SettingsCtrls["ringTransparency"].OnEvent("Change", (*) => UpdatePreviews())
 	SettingsGuiObj.Add("Text", "x30 y73 w230", "Inner Circle Transparency (0-255)")
-	SettingsCtrls["circleTransparency"] := AddClampedIntEdit(SettingsGuiObj, 270, 70, 60,
-		IniRead(app.iniFile, "Conf", "circleTransparency", Conf.circleTransparency), 0, 255)
+	SettingsCtrls["circleTransparency"] := AddClampedIntEdit(SettingsGuiObj, 270, 70, 60, "circleTransparency")
 	SettingsCtrls["circleTransparency"].OnEvent("Change", (*) => UpdatePreviews())
 
 	colorList := ["default", "l", "m", "r"]
@@ -175,12 +155,11 @@ ShowSettingsGui(*) {
 		SettingsGuiObj.Add("Text", "x30 y" y " w80", label)
 
 		chkBorder := SettingsGuiObj.Add("CheckBox", "x115 y" (y - 2) " w70", "Border")
-		chkBorder.Value := IniRead(app.iniFile, "Colors", ColorIniKey(key, "showBorder"),
-			colors[key].showBorder ? "1" : "0") = "1" ? 1 : 0
+		chkBorder.Value := colors[key].showBorder ? 1 : 0
 		SettingsCtrls[key "_showBorder"] := chkBorder
 		chkBorder.OnEvent("Click", (*) => UpdatePreviews())
 
-		borderVal := ColorToRGBHex(IniRead(app.iniFile, "Colors", ColorIniKey(key, "border"), colors[key].border))
+		borderVal := ColorToRGBHex(colors[key].border)
 		borderEdit := SettingsGuiObj.Add("Edit", "x188 y" (y - 3) " w55", borderVal)
 		SettingsCtrls[key "_border"] := borderEdit
 		borderSwatch := MakeSwatch(SettingsGuiObj, 247, y - 3, borderVal)
@@ -191,12 +170,11 @@ ShowSettingsGui(*) {
 		borderEdit.OnEvent("LoseFocus", PadColorEdit.Bind(borderEdit, borderSwatch))
 
 		chkFill := SettingsGuiObj.Add("CheckBox", "x309 y" (y - 2) " w45", "Fill")
-		chkFill.Value := IniRead(app.iniFile, "Colors", ColorIniKey(key, "showFill"),
-			colors[key].showFill ? "1" : "0") = "1" ? 1 : 0
+		chkFill.Value := colors[key].showFill ? 1 : 0
 		SettingsCtrls[key "_showFill"] := chkFill
 		chkFill.OnEvent("Click", (*) => UpdatePreviews())
 
-		backVal := ColorToRGBHex(IniRead(app.iniFile, "Colors", ColorIniKey(key, "back"), colors[key].back))
+		backVal := ColorToRGBHex(colors[key].back)
 		backEdit := SettingsGuiObj.Add("Edit", "x358 y" (y - 3) " w55", backVal)
 		SettingsCtrls[key "_back"] := backEdit
 		backSwatch := MakeSwatch(SettingsGuiObj, 417, y - 3, backVal)
@@ -218,15 +196,17 @@ ShowSettingsGui(*) {
 
 	tab.UseTab()
 	global SettingsBtnSave
+	fileMenu := Menu()
+	fileMenu.Add("Load Profile...", (*) => LoadProfile())
+	fileMenu.Add("Save Profile As...", (*) => SaveAsProfile())
+	bar := MenuBar()
+	bar.Add("&File", fileMenu)
+	SettingsGuiObj.MenuBar := bar
 	btnReset := SettingsGuiObj.Add("Button", "x15 y477 w120 h30", "Reset to Defaults")
-	btnLoad := SettingsGuiObj.Add("Button", "x140 y477 w70 h30", "Load...")
-	SettingsBtnSave := SettingsGuiObj.Add("Button", "x215 y477 w70 h30 Default", "Save")
-	btnSaveAs := SettingsGuiObj.Add("Button", "x290 y477 w100 h30", "Save As...")
+	SettingsBtnSave := SettingsGuiObj.Add("Button", "x295 y477 w90 h30 Default", "OK")
 	btnCancel := SettingsGuiObj.Add("Button", "x395 y477 w95 h30", "Cancel")
 	btnReset.OnEvent("Click", (*) => ResetToDefaults())
-	btnLoad.OnEvent("Click", (*) => LoadProfile())
 	SettingsBtnSave.OnEvent("Click", (*) => SaveSettingsGui())
-	btnSaveAs.OnEvent("Click", (*) => SaveAsProfile())
 	btnCancel.OnEvent("Click", (*) => CloseSettingsGui())
 
 	SettingsGuiObj.Show("w520 h522")
@@ -234,14 +214,25 @@ ShowSettingsGui(*) {
 	UpdateHotkeyConflictWarning()
 }
 
-AddClampedIntEdit(gui, x, y, w, val, minVal, maxVal) {
+AddClampedIntEdit(gui, x, y, w, key) {
+	bounds := ConfRanges()[key]
+	minVal := bounds[1], maxVal := bounds[2]
+	val := Conf.%key%
 	opts := (minVal < 0) ? "" : " Number"
 	editCtrl := gui.Add("Edit", "x" x " y" y " w" w opts, val)
 	if (minVal < 0)
 		editCtrl.OnEvent("Change", FilterSignedIntEdit.Bind(editCtrl))
+	editCtrl.OnEvent("LoseFocus", (*) => ClampEditCtrl(editCtrl, key))
 	udY := y - 1
 	gui.Add("UpDown", "x-2 y" udY " w18 Range" minVal "-" maxVal " AltSubmit", val)
 	return editCtrl
+}
+
+ClampEditCtrl(editCtrl, key) {
+	bounds := ConfRanges()[key]
+	clamped := Max(bounds[1], Min(bounds[2], ParseIntSafe(editCtrl.Value, Conf.%key%)))
+	if (clamped != editCtrl.Value)
+		editCtrl.Value := clamped
 }
 
 FilterSignedIntEdit(editCtrl, *) {
@@ -291,54 +282,33 @@ AssignHotkeyValue(key, val) {
 SyncNowFromGui() {
 	global SettingsCtrls, SettingsGuiObj
 	SettingsGuiObj.Opt("+OwnDialogs")
-	obsBase := A_AppData "\obs-studio\basic"
-	profileDir := GetActiveOBSProfileDir(obsBase)
-	if !profileDir {
-		MsgBox("OBS profile folder was not found.", app.name, "Iconx")
+	obs := ReadOBSHotkeys()
+	if obs.error {
+		MsgBox(obs.error ".", app.name, "Iconx")
 		return
 	}
 
-	iniPath := obsBase "\profiles\" profileDir "\basic.ini"
-	if !FileExist(iniPath) {
-		MsgBox("OBS profile file was not found (" profileDir ").", app.name, "Iconx")
-		return
-	}
-
-	startCombo := ParseOBSHotkey(IniRead(iniPath, "Hotkeys", "OBSBasic.StartRecording", ""))
-	stopCombo := ParseOBSHotkey(IniRead(iniPath, "Hotkeys", "OBSBasic.StopRecording", ""))
-	pauseCombo := ParseOBSHotkey(IniRead(iniPath, "Hotkeys", "OBSBasic.PauseRecording", ""))
-	unpauseCombo := ParseOBSHotkey(IniRead(iniPath, "Hotkeys", "OBSBasic.UnpauseRecording", ""))
-
-	problems := []
-	if (startCombo && stopCombo && startCombo != stopCombo)
-		problems.Push("'Start Recording' (" startCombo ") and 'Stop Recording' (" stopCombo ") use different keys in OBS.")
-	if (pauseCombo && unpauseCombo && pauseCombo != unpauseCombo)
-		problems.Push("'Pause Recording' (" pauseCombo ") and 'Unpause Recording' (" unpauseCombo ") use different keys in OBS.")
-
-	if problems.Length {
+	if obs.problems.Length {
 		msg := "There is an OBS hotkey mismatch that needs to be fixed:`n`n"
-		for p in problems
+		for p in obs.problems
 			msg .= "• " p "`n"
 		msg .= "`nFix it in OBS → Settings → Hotkeys, then try again."
 		MsgBox(msg, app.name, "Iconx")
 		return
 	}
 
-	recCombo := startCombo ? startCombo : stopCombo
-	pzCombo := pauseCombo ? pauseCombo : unpauseCombo
-
-	if !recCombo && !pzCombo {
+	if !obs.rec && !obs.pz {
 		MsgBox("No Start/Stop or Pause/Resume hotkeys are assigned in OBS.", app.name, "Iconx")
 		return
 	}
 
-	if recCombo
-		AssignHotkeyValue("handleRecording", recCombo)
-	if pzCombo
-		AssignHotkeyValue("handlePause", pzCombo)
+	if obs.rec
+		AssignHotkeyValue("handleRecording", obs.rec)
+	if obs.pz
+		AssignHotkeyValue("handlePause", obs.pz)
 
 	UpdateHotkeyConflictWarning()
-	MsgBox("Synced from OBS. Click Save to keep these values.", app.name, "Iconi")
+	MsgBox("Synced from OBS. Click OK to keep these values.", app.name, "Iconi")
 }
 
 CheckHotkeyConflicts() {
@@ -460,16 +430,14 @@ MakeSwatch(gui, x, y, hex6) {
 }
 
 CloseSettingsGui() {
-	global SettingsGuiObj, PreviewApp, PreviewColor, SettingsPrevHl, SettingsPrevSuspend, SettingsTab
+	global SettingsGuiObj, PreviewApp, PreviewColor, SettingsPrevSuspend
 	if IsObject(SettingsGuiObj) {
 		SettingsGuiObj.Destroy()
 		SettingsGuiObj := ""
-		SettingsTab := ""
 		PreviewApp := ""
 		PreviewColor := ""
 	}
-	State.hl := SettingsPrevHl
-	showHighlight(State.hl)
+	RefreshHighlight()
 	Suspend(SettingsPrevSuspend ? true : false)
 	UpdateTrayMenu()
 }
@@ -552,7 +520,7 @@ PickColor(hex6) {
 	rgb := Integer("0x" SubStr(clean, 5, 2) SubStr(clean, 3, 2) SubStr(clean, 1, 2))
 	cc := Buffer(9 * A_PtrSize, 0)
 	NumPut("UInt", cc.Size, cc, 0)
-	NumPut("Ptr", 0, cc, A_PtrSize)
+	NumPut("Ptr", IsObject(SettingsGuiObj) ? SettingsGuiObj.Hwnd : 0, cc, A_PtrSize)
 	NumPut("UInt", rgb, cc, A_PtrSize * 3)
 	NumPut("Ptr", customColors.Ptr, cc, A_PtrSize * 4)
 	NumPut("UInt", 0x1 | 0x2, cc, A_PtrSize * 5)
@@ -567,11 +535,6 @@ PickColor(hex6) {
 
 ParseIntSafe(val, fallback) {
 	try return Integer(val)
-	return fallback
-}
-
-ParseFloatSafe(val, fallback) {
-	try return Float(val)
 	return fallback
 }
 
@@ -639,14 +602,20 @@ UpdatePreviews() {
 	lineARGB := (bgLevel < 128) ? 0x60FFFFFF : 0x60000000
 
 	if IsObject(PreviewApp) {
-		hBmp := BuildPreviewStrip(PREVIEW_APP_W, PREVIEW_APP_H, [
+		ControlGetPos(, , &appW, &appH, PreviewApp)
+		if (appW < 1 || appH < 1)
+			appW := PREVIEW_APP_W, appH := PREVIEW_APP_H
+		hBmp := BuildPreviewStrip(appW, appH, [
 			[defBorder, defBack, defRingAlpha, defCircleAlpha]
 		], diameter, thickness, bgARGB, lineARGB, offsetX, offsetY)
 		SetPreviewBitmap(PreviewApp, hBmp)
 	}
 
 	if IsObject(PreviewColor) {
-		hBmp := BuildPreviewStrip(PREVIEW_COLOR_W, PREVIEW_COLOR_H, [
+		ControlGetPos(, , &colW, &colH, PreviewColor)
+		if (colW < 1 || colH < 1)
+			colW := PREVIEW_COLOR_W, colH := PREVIEW_COLOR_H
+		hBmp := BuildPreviewStrip(colW, colH, [
 			[defBorder, defBack, defRingAlpha, defCircleAlpha],
 			[lBorder, lBack, lRingAlpha, lCircleAlpha],
 			[mBorder, mBack, mRingAlpha, mCircleAlpha],
@@ -712,8 +681,8 @@ BuildPreviewStrip(canvasW, canvasH, items, diameter, thickness, bgARGB := 0xFF2B
 	}
 
 	hBitmap := Gdip_CreateHBITMAPFromBitmap(bitmap, bgARGB)
-	Gdip_DisposeImage(bitmap)
 	Gdip_DeleteGraphics(graphics)
+	Gdip_DisposeImage(bitmap)
 	return hBitmap
 }
 
@@ -729,6 +698,32 @@ ConfKeys() {
 		"offsetX", "offsetY", "showOnStartup", "showRecordingNotifications", "showMousePosNotifications",
 		"syncHotkeysFromOBS"]
 	return keys
+}
+
+ConfRanges() {
+	static m := Map(
+		"diameter", [4, 500],
+		"thickness", [1, 250],
+		"ringTransparency", [0, 255],
+		"circleTransparency", [0, 255],
+		"animTransparency", [0, 255],
+		"endTransparency", [0, 255],
+		"steps", [1, 200],
+		"startDiameter", [1, 500],
+		"endDiameter", [1, 500],
+		"offsetX", [-50, 50],
+		"offsetY", [-50, 50],
+		"showOnStartup", [0, 1],
+		"showRecordingNotifications", [0, 1],
+		"showMousePosNotifications", [0, 1],
+		"syncHotkeysFromOBS", [0, 1]
+	)
+	return m
+}
+
+ClampConfValue(key, val) {
+	bounds := ConfRanges()[key]
+	return Max(bounds[1], Min(bounds[2], ParseIntSafe(val, bounds[1])))
 }
 
 ColorCtrlKeys() {
@@ -752,11 +747,8 @@ ProfilesDir() {
 WriteFormToIni(targetIni) {
 	global SettingsCtrls
 
-	for key in HotkeyKeys() {
-		val := SettingsCtrls[key].Value
-		if val != ""
-			IniWrite(val, targetIni, "Hotkeys", key)
-	}
+	for key in HotkeyKeys()
+		IniWrite(SettingsCtrls[key].Value, targetIni, "Hotkeys", key)
 
 	for key in ConfKeys() {
 		val := SettingsCtrls[key].Value
@@ -767,6 +759,13 @@ WriteFormToIni(targetIni) {
 			try parsed := Float(val)
 			if (parsed == "" || parsed < 1 || parsed > 1000)
 				val := FormatFrameTime((parsed == "") ? Conf.animTargetFrameTime : Max(1, Min(parsed, 1000)))
+		} else if ConfRanges().Has(key) {
+			clamped := ClampConfValue(key, val)
+			if (key = "thickness")
+				clamped := Min(clamped, Max(ParseIntSafe(SettingsCtrls["diameter"].Value, Conf.diameter) // 2, 1))
+			if (clamped != val)
+				SettingsCtrls[key].Value := clamped
+			val := clamped
 		}
 		IniWrite(val, targetIni, "Conf", key)
 	}
@@ -835,20 +834,17 @@ SaveAsProfile() {
 		return
 	}
 
-	name := ""
-	ib := InputBox("Profile name:", app.name " - Save As", "w300 h120")
-	if ib.Result != "OK" || Trim(ib.Value) = ""
+	selected := FileSelect("S16", ProfilesDir() "\", "Save Profile As", "Settings Profile (*.ini)")
+	if selected = ""
 		return
-
-	name := RegExReplace(Trim(ib.Value), "[\\/:*?`"<>|]", "_")
-	targetIni := ProfilesDir() "\" name ".ini"
-
-	if FileExist(targetIni) {
-		if MsgBox("Profile '" name "' already exists. Overwrite?", app.name, "YesNo Icon!") != "Yes"
+	if !RegExMatch(selected, "i)\.ini$") {
+		selected .= ".ini"
+		if FileExist(selected) && MsgBox("'" selected "' already exists. Overwrite?", app.name, "YesNo Icon!") != "Yes"
 			return
 	}
 
-	WriteFormToIni(targetIni)
+	WriteFormToIni(selected)
+	SplitPath(selected, &name)
 	MsgBox("Profile '" name "' saved.", app.name, "Iconi")
 }
 
@@ -861,7 +857,7 @@ LoadProfile() {
 	if selected = ""
 		return
 	ApplyIniValuesToForm(selected)
-	MsgBox("Profile loaded into the form.`nClick Save to apply it, or your changes will be lost if you close this window.", app.name, "Iconi")
+	MsgBox("Profile loaded into the form.`nClick OK to apply it, or your changes will be lost if you close this window.", app.name, "Iconi")
 }
 
 SaveSettingsGui() {

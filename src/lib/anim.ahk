@@ -2,6 +2,41 @@
 
 CircleCenterDelta(currDiameter) => (Conf.diameter - currDiameter) // 2
 
+AnimFrameParams(animStep, steps) {
+	progress := animStep / steps
+	easedProgress := progress * progress
+	currDiameter := Max(Floor(Conf.startDiameter + easedProgress * (Conf.endDiameter - Conf.startDiameter)), 1)
+
+	fadeStartStep := steps * 0.75
+	fadeRangeSteps := steps * 0.25
+	if (animStep > fadeStartStep) {
+		fadeProgress := (animStep - fadeStartStep) / fadeRangeSteps
+		currTransparency := Round(Conf.startTransparency - fadeProgress * (Conf.startTransparency - Conf.endTransparency))
+		currTransparency := Max(currTransparency, Conf.endTransparency)
+	} else {
+		currTransparency := Conf.startTransparency
+	}
+	return [currDiameter, currTransparency]
+}
+
+PrewarmAnimCache() {
+	steps := Max(Conf.steps, 1)
+	targets := []
+	for key, circle in app.animCircles {
+		if colors[key].showFill
+			targets.Push(circle)
+	}
+	if (targets.Length * (steps + 1) + app.circles.Count > SolidCircle.maxCacheSize)
+		return
+	for circle in targets {
+		circle.Warm(Conf.startDiameter, Conf.startTransparency)
+		loop steps {
+			frame := AnimFrameParams(A_Index, steps)
+			circle.Warm(frame[1], frame[2])
+		}
+	}
+}
+
 AnimateCircle(buttonType, x, y) {
 	static activeAnimations := Map()
 
@@ -25,7 +60,7 @@ AnimateCircle(buttonType, x, y) {
 	initialDelta := CircleCenterDelta(Conf.startDiameter)
 	try {
 		circle.Update(Conf.startDiameter, Conf.startTransparency)
-		circle.Show(x + Conf.offsetFinalX + initialDelta, y + Conf.offsetFinalY + initialDelta)
+		ShowAtomic([[circle, x + Conf.offsetFinalX + initialDelta, y + Conf.offsetFinalY + initialDelta]])
 	}
 
 	animationTimer() {
@@ -41,25 +76,11 @@ AnimateCircle(buttonType, x, y) {
 			return
 		}
 
-		progress := animStep / steps
-		easedProgress := progress * progress
-
-		currDiameter := Floor(Conf.startDiameter + easedProgress * (Conf.endDiameter - Conf.startDiameter))
-		currDiameter := Max(currDiameter, 1)
-		currDelta := CircleCenterDelta(currDiameter)
-
-		fadeStartStep := steps * 0.75
-		fadeRangeSteps := steps * 0.25
-		if (animStep > fadeStartStep) {
-			fadeProgress := (animStep - fadeStartStep) / fadeRangeSteps
-			currTransparency := Round(Conf.startTransparency - fadeProgress * (Conf.startTransparency - Conf.endTransparency))
-			currTransparency := Max(currTransparency, Conf.endTransparency)
-		} else {
-			currTransparency := Conf.startTransparency
-		}
+		frame := AnimFrameParams(animStep, steps)
+		currDelta := CircleCenterDelta(frame[1])
 
 		try {
-			circle.Update(currDiameter, currTransparency)
+			circle.Update(frame[1], frame[2])
 			circle.Show(x + Conf.offsetFinalX + currDelta, y + Conf.offsetFinalY + currDelta)
 		}
 
