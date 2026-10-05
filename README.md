@@ -3,7 +3,7 @@
 [![AutoHotkey](https://img.shields.io/badge/Language-AutoHotkey_v2-green.svg)](https://www.autohotkey.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-blue.svg)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/License-GPL_v3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.1-brightgreen.svg)](https://github.com/mesutakcan/OBS-Cursor-Tools/releases)
+[![Version](https://img.shields.io/badge/Version-1.2-brightgreen.svg)](https://github.com/mesutakcan/OBS-Cursor-Tools/releases)
 
 ![GitHub stars](https://img.shields.io/github/stars/mesutakcan/OBS-Cursor-Tools?style=social)
 ![GitHub forks](https://img.shields.io/github/forks/mesutakcan/OBS-Cursor-Tools?style=social)
@@ -17,6 +17,7 @@ OBS Cursor Tools is a Windows utility written in AutoHotkey v2. It displays a co
 ## Features
 
 - Displays a highlighter ring and optional inner fill around the cursor.
+- Shows the highlighter automatically while a recording is running, or all the time if you choose **Always show highlighter**.
 - Uses separate colors and border/fill visibility settings for the default state and each mouse button.
 - Shows an expanding click animation after a left, middle, or right click.
 - Reads OBS Start/Stop and Pause/Unpause hotkeys automatically, or synchronizes them manually.
@@ -37,7 +38,7 @@ OBS Cursor Tools is a Windows utility written in AutoHotkey v2. It displays a co
 3. Run the downloaded executable.
 4. The application will continue running in the notification area near the clock.
 
-The compiled executable contains the AutoHotkey source and included library code. The application icon is embedded during the build, so the release executable does not need the `lib` folder or a separate `app_icon.ico` file. `settings.ini` is optional: if it is missing, the built-in defaults are used. Profiles are created in a `profiles` folder next to the executable when you save one.
+The compiled executable contains the AutoHotkey source, included library code, and both application icons (normal and paused), so the release executable does not need the `lib` folder or separate `.ico` files. `settings.ini` is optional: if it is missing, the built-in defaults are used. Profiles are created in a `profiles` folder next to the executable when you save one.
 
 ### Run from source
 
@@ -47,6 +48,7 @@ Install [AutoHotkey v2](https://www.autohotkey.com/), then keep the source files
 src/
 ├── OBS-Cursor-Tools.ahk
 ├── app_icon.ico
+├── app_icon_pause.ico
 └── lib/
     ├── anim.ahk
     ├── gdip.ahk
@@ -57,19 +59,36 @@ src/
     └── settings.ahk
 ```
 
-Run `src/OBS-Cursor-Tools.ahk` with AutoHotkey v2. The main script includes the files in `src/lib/` by name, so renaming or moving them without updating the `#Include` lines will prevent the source version from starting.
-
+Run `src/OBS-Cursor-Tools.ahk` with AutoHotkey v2. The main script includes the files in `src/lib/` by name, so renaming or moving them without updating the `#Include` lines will prevent the source version from starting. When running from source, the tray icon switches to `app_icon_pause.ico` while hotkeys are suspended; if the icon files are missing, the default AutoHotkey icon is used.
 
 ## Quick start
 
 1. Start OBS Cursor Tools. Start OBS Studio too if you want OBS hotkey synchronization.
 2. Right-click the tray icon and open **Settings** if you want to change the defaults.
-3. Turn the highlighter on with <kbd>Ctrl+Shift+F8</kbd>.
+3. Start recording in OBS with its Start/Stop hotkey. The highlighter appears while the recording is running and is hidden while it is paused or stopped.
 4. Move and click normally. The ring and click animations will appear over the screen.
-5. Start/stop or pause/resume recording from OBS, or use the corresponding synchronized hotkey.
-6. Turn the highlighter off with the same toggle hotkey when you are finished.
+5. Press the toggle hotkey (<kbd>Ctrl+Shift+F8</kbd> by default) at any time to show or hide the highlighter manually.
+
+If you want the highlighter visible even when you are not recording, enable **Always show highlighter** in Settings → Appearance.
 
 The application runs in the background. Right-click its notification-area icon to open the menu.
+
+## How the highlighter is shown
+
+The highlighter visibility follows these rules, in order:
+
+1. It is always hidden while **Pause Program** is active or the Settings window is open.
+2. If you pressed **Toggle Highlighter**, your choice applies: the toggle flips whatever is currently shown. A manual choice stays in effect until the recording is stopped, then automatic behavior returns.
+3. Otherwise it is shown when **Always show highlighter** is enabled, or while a recording is running and not paused.
+
+Toggling the highlighter never shows a notification, so that action does not add a notification overlay to the recording. The tray menu check mark next to **Toggle Highlighter** reflects whether the ring is currently visible.
+
+## Recording behavior
+
+- When a recording starts or resumes, the cursor glides to the last saved mouse position.
+- When a recording stops or pauses, the current cursor position is saved automatically (silently, without a notification).
+
+This lets you pick up exactly where you left off between takes. These automatic saves are part of the five-position history described below.
 
 ## Default hotkeys
 
@@ -77,13 +96,21 @@ The application runs in the background. Right-click its notification-area icon t
 |---|---|
 | Turn highlighter on/off | <kbd>Ctrl+Shift+F8</kbd> |
 | Save mouse position | <kbd>Ctrl+Numpad6</kbd> |
-| Move to saved position | <kbd>Ctrl+Numpad4</kbd> |
+| Move to last saved position | <kbd>Ctrl+Numpad4</kbd> |
 | Move to previous position | <kbd>Ctrl+Numpad7</kbd> |
 | Start/stop recording | Read from OBS; fallback <kbd>Ctrl+Numpad0</kbd> |
 | Pause/resume recording | Read from OBS; fallback <kbd>Pause</kbd> |
 | Type from clipboard | <kbd>Ctrl+.</kbd> |
 
-The actual hotkeys currently in use are shown in the tray menu under **Hotkeys**. The Settings window can capture a new combination directly. Recording hotkeys are passed through to OBS, so OBS can receive the same key combination.
+The actual hotkeys currently in use are shown in the tray menu under **Hotkeys**. The Settings window can capture a new combination directly. Recording hotkeys are passed through to OBS, so OBS can receive the same hotkey. A hotkey that has been cleared in Settings is disabled.
+
+## Mouse position history
+
+- **Save mouse position** adds the current position to the end of a five-entry history; the oldest entry is dropped when the history is full.
+- **Move to last position** moves to the newest saved position.
+- **Move to previous position** moves to the entry before the newest one. Pressing it again steps further back, and after the oldest entry it wraps around to the newest.
+
+The cursor glides to the target in small steps, so the highlighter follows the movement.
 
 ## OBS Studio setup
 
@@ -107,7 +134,9 @@ You can synchronize in three ways:
 
 - **Automatic:** enabled by default and checked when the application starts.
 - **Tray menu:** choose **Sync Hotkeys from OBS**. If values change, the application offers to restart so the new hotkeys can be registered.
-- **Settings window:** use **Sync Now**, then click **Save** and restart when prompted.
+- **Settings window:** use **Sync Now** on the Hotkeys tab, then click **OK** and restart when prompted.
+
+While automatic synchronization is enabled, the two recording hotkey fields in Settings are locked because their values come from OBS.
 
 ## Notification-area menu
 
@@ -117,11 +146,11 @@ Right-click the application icon to access:
 - **Hotkeys**: View the current hotkey assignments.
 - **Settings**: Open the Settings window.
 - **Sync Hotkeys from OBS**: Re-read the OBS recording hotkeys.
-- **Pause Program**: Turn off the highlighter and suspend all hotkeys without closing the app.
+- **Pause Program**: Hide the highlighter and suspend all hotkeys without closing the app.
 - **Suspend Hotkeys**: Suspend hotkeys while leaving the highlighter visible if it was enabled.
-- **Toggle Highlighter**: Turn cursor highlighting on or off.
+- **Toggle Highlighter**: Show or hide the highlighter.
 - **Save mouse position**: Add the current cursor position to the five-position history.
-- **Move mouse to saved position**: Return to the newest saved position.
+- **Move mouse to last position**: Move to the newest saved position.
 - **Move mouse to previous position**: Move backward through saved positions.
 - **Start/stop recording**: Use the configured recording hotkey.
 - **Pause/resume recording**: Use the configured pause hotkey.
@@ -129,22 +158,29 @@ Right-click the application icon to access:
 - **Restart**: Restart the application.
 - **Exit**: Close the application.
 
+While hotkeys are suspended (**Pause Program**, **Suspend Hotkeys**, or while the Settings window is open) the tray icon changes to the paused icon.
+
 ## Settings window
 
-Open **Settings** from the tray menu to change the application without editing files by hand.
+Open **Settings** from the tray menu to change the application without editing files by hand. Hotkeys are suspended and the highlighter is hidden while the window is open.
 
 The window has three tabs:
 
-- **Appearance**: Ring diameter, thickness, X/Y offset, click-animation size, frame count, frame time, animation alpha, startup behavior, and notification switches.
-- **Colors**: Ring and fill colors for the default state and left, middle, and right clicks. Border and fill can be shown or hidden independently. A live preview is included.
-- **Hotkeys**: Press the desired key combination directly. Conflicting assignments are detected and block saving until they are resolved. This tab also contains the OBS synchronization switch and **Sync Now**.
+- **Appearance**: Highlighter startup behavior, notification switches, ring diameter, thickness, X/Y offset, and the click-animation settings (steps, start/end diameter, start/end transparency, frame time). A live preview of the ring is included.
+- **Colors**: Ring and fill transparency, plus ring and fill colors for the default state and left, middle, and right clicks. Border and fill can be shown or hidden independently. A live preview with an adjustable background is included.
+- **Hotkeys**: Press the desired hotkey directly. Conflicting assignments are detected and block saving until they are resolved. This tab also contains the OBS synchronization switch and **Sync Now**.
+
+Numeric fields are limited to their valid range when you leave the field and again when the settings are saved. The ring thickness can never exceed half of the diameter.
+
+The **File** menu contains the profile commands:
+
+- **Load Profile...**: Loads a profile into the form. Click **OK** afterward to apply it to the application.
+- **Save Profile As...**: Saves the form as a named `.ini` profile using the standard Save dialog. The `.ini` extension is added automatically when omitted.
 
 The buttons at the bottom behave as follows:
 
-- **Save**: Writes the form to `settings.ini` and offers to restart the application. A restart is required for the running graphics and hotkey registrations to use the new values.
-- **Save As...**: Saves the form as a named `.ini` profile.
-- **Load...**: Loads a profile into the form. Click **Save** afterward to apply it to the application.
 - **Reset to Defaults**: Restores the built-in defaults in the form.
+- **OK**: Writes the form to `settings.ini` and offers to restart the application. A restart is required for the running graphics and hotkey registrations to use the new values. The button is disabled while hotkey conflicts exist.
 - **Cancel**: Closes the window without saving.
 
 Profiles are stored in a `profiles` folder next to the script or executable. The folder is created when the first profile is saved.
@@ -163,7 +199,9 @@ The Settings window is recommended for normal use. To edit `settings.ini` direct
 4. Save the file.
 5. Start OBS Cursor Tools again.
 
-Back up `settings.ini` before making manual changes. Hotkeys use AutoHotkey v2 syntax: `^` = Ctrl, `!` = Alt, `+` = Shift, and `#` = Win. For example, `^+F8` means Ctrl+Shift+F8.
+Back up `settings.ini` before making manual changes. Hotkeys use AutoHotkey v2 syntax: `^` = Ctrl, `!` = Alt, `+` = Shift, and `#` = Win. For example, `^+F8` means Ctrl+Shift+F8. An empty hotkey value disables that hotkey.
+
+Numeric values outside their allowed range are clamped on load, and unreadable numbers fall back to the defaults. Color values are not validated on load, so write them exactly as `0xAARRGGBB` or `0xFFRRGGBB`.
 
 ## Settings reference
 
@@ -173,7 +211,7 @@ The following tables document the keys read from `settings.ini`. Values not pres
 
 | Key | Meaning | Default |
 |---|---|---|
-| `toggleHighlight` | Turns the cursor highlighter on/off | `^+F8` |
+| `toggleHighlight` | Shows/hides the cursor highlighter | `^+F8` |
 | `moveMousePos` | Moves the cursor to the newest saved position | `^Numpad4` |
 | `movePrevMousePos` | Moves the cursor to the previous saved position | `^Numpad7` |
 | `saveMousePos` | Saves the current cursor position | `^Numpad6` |
@@ -183,34 +221,36 @@ The following tables document the keys read from `settings.ini`. Values not pres
 
 ### `[Conf]`
 
-Alpha values range from `0` (invisible) to `255` (fully opaque).
+Alpha values range from `0` (invisible) to `255` (fully opaque). Values outside the range are clamped.
 
-| Key | Meaning | Default |
-|---|---|---|
-| `diameter` | Outer diameter of the highlighter ring, in pixels | `48` |
-| `thickness` | Ring border thickness, in pixels | `4` |
-| `ringTransparency` | Ring alpha | `190` |
-| `circleTransparency` | Inner-fill alpha | `170` |
-| `animTransparency` | Click-animation alpha at the start | `255` |
-| `endTransparency` | Click-animation alpha at the end | `0` |
-| `steps` | Number of click-animation steps | `15` |
-| `startDiameter` | Click-animation diameter at the start, in pixels | `10` |
-| `endDiameter` | Click-animation diameter at the end, in pixels | `50` |
-| `animTargetFrameTime` | Target time per animation step, in milliseconds | `16.67` |
-| `offsetX` | Horizontal ring offset in pixels; negative is left | `0` |
-| `offsetY` | Vertical ring offset in pixels; negative is up | `0` |
-| `showOnStartup` | Turns the highlighter on when the app starts | `0` |
-| `showRecordingNotifications` | Shows recording start/stop/pause notifications | `1` |
-| `showMousePosNotifications` | Shows mouse-position save/previous-position notifications | `1` |
-| `syncHotkeysFromOBS` | Reads recording hotkeys from OBS at startup | `1` |
+| Key | Meaning | Default | Range |
+|---|---|---|---|
+| `diameter` | Outer diameter of the highlighter ring, in pixels | `48` | 4–500 |
+| `thickness` | Ring border thickness, in pixels (at most half the diameter) | `4` | 1–250 |
+| `ringTransparency` | Ring alpha | `190` | 0–255 |
+| `circleTransparency` | Inner-fill alpha | `170` | 0–255 |
+| `animTransparency` | Click-animation alpha at the start | `255` | 0–255 |
+| `endTransparency` | Click-animation alpha at the end | `0` | 0–255 |
+| `steps` | Number of click-animation steps | `15` | 1–200 |
+| `startDiameter` | Click-animation diameter at the start, in pixels | `10` | 1–500 |
+| `endDiameter` | Click-animation diameter at the end, in pixels | `50` | 1–500 |
+| `animTargetFrameTime` | Target time per animation step, in milliseconds | `16.67` | 1–1000 |
+| `offsetX` | Horizontal ring offset in pixels; negative is left | `0` | -50–50 |
+| `offsetY` | Vertical ring offset in pixels; negative is up | `0` | -50–50 |
+| `showOnStartup` | **Always show highlighter.** `1` keeps the highlighter visible at all times; `0` shows it only while a recording is running and not paused | `0` | 0/1 |
+| `showRecordingNotifications` | Shows recording start/stop/pause notifications | `1` | 0/1 |
+| `showMousePosNotifications` | Shows mouse-position save/previous-position notifications | `1` | 0/1 |
+| `syncHotkeysFromOBS` | Reads recording hotkeys from OBS at startup | `1` | 0/1 |
+
+The value of `showOnStartup` is applied when the application starts. The key name is kept for compatibility with earlier versions.
 
 ### `[Colors]`
 
-Color entries are written as `0xAARRGGBB`. The Settings window edits the six-digit `RRGGBB` portion. Rendering uses the RGB portion of each value; opacity is controlled by the alpha settings in `[Conf]` and by the border/fill visibility flags below.
+Color entries are written as `0xAARRGGBB`. The Settings window edits the six-digit `RRGGBB` portion and writes it with an `FF` alpha. Rendering uses the RGB portion of each value; opacity is controlled by the alpha settings in `[Conf]` and by the border/fill visibility flags below.
 
 | Key | Meaning | Default |
 |---|---|---|
-| `defaultBack` | Fill color when no button is pressed | `0x00FFFFFF` (white RGB; fill hidden by default) |
+| `defaultBack` | Fill color when no button is pressed | `0xFF00FFFF` (cyan; fill hidden by default) |
 | `defaultBorder` | Ring color when no button is pressed | `0xFF00FFFF` (cyan) |
 | `leftBack` | Fill color on left click | `0xFFFF0000` (red) |
 | `leftBorder` | Ring color on left click | `0xFF00FFFF` (cyan) |
@@ -219,7 +259,7 @@ Color entries are written as `0xAARRGGBB`. The Settings window edits the six-dig
 | `rightBack` | Fill color on right click | `0xFF00FF00` (green) |
 | `rightBorder` | Ring color on right click | `0xFFFF0000` (red) |
 
-Each state also has two visibility switches. A value of `1` shows the element and `0` hides it:
+Each state also has two visibility switches. A value of `1` shows the element and `0` hides it. Defaults are `1` for every switch except `defaultShowFill`, which is `0`.
 
 ```text
 defaultShowBorder  defaultShowFill
@@ -232,11 +272,15 @@ rightShowBorder    rightShowFill
 
 ### The highlighter does not appear
 
-Make sure the application is running and press the highlighter hotkey. Check the current assignment in the tray menu under **Hotkeys**. If the highlighter is configured to start automatically, remember that the default is off.
+By default the highlighter is shown only while a recording is running and not paused. Start recording, press the highlighter hotkey, or enable **Always show highlighter** in Settings. Check the current hotkey assignment in the tray menu under **Hotkeys**. The highlighter is also hidden while **Pause Program** is active or the Settings window is open.
 
 ### Recording controls do not work
 
 Check that the OBS Start/Stop pair and Pause/Unpause pair use matching hotkeys. Verify the active OBS profile is stored in the standard configuration location, then restart OBS Cursor Tools. You can also use **Sync Hotkeys from OBS** from the tray menu.
+
+### The highlighter does not match the OBS recording state
+
+OBS Cursor Tools follows the configured hotkeys, not OBS itself. See [Recording state](#known-limitations) below, and use the configured hotkey to bring the two back in step.
 
 ### My hotkeys are different from the defaults
 
@@ -258,7 +302,10 @@ When running the source file, install AutoHotkey v2 and verify that `src/lib/` c
 
 ## Known limitations
 
-- **Very fast movement can briefly lag under heavy CPU load.** The cursor hook and rendering loop are separated, but software encoding or other high-load tasks can introduce a short visual delay.
+- **Recording state is tracked from hotkeys.** OBS Cursor Tools tracks recording and pause state from the configured hotkeys; it does not query OBS. If recording is started, stopped, or paused directly from OBS controls, another application, or an external automation tool, the highlighter state may not reflect the actual OBS state until the configured hotkeys are used again.
+- **Notifications may appear in your recording.** Recording notifications are displayed as always-on-top windows. When using Display Capture, they can appear in the recorded output. Disable **Show Recording Start/Stop/Pause Notifications** in Settings if this is undesirable.
+- **Type from Clipboard converts pairs of spaces to tabs** to preserve indentation. This may alter ordinary text that intentionally contains consecutive spaces.
+- **Very fast movement can briefly lag under heavy CPU load.** The cursor hook and rendering loop are separated, but software encoding or other high-load tasks can introduce a short visual delay. Under heavy load, click animations may also run slower than the configured frame time.
 - **OBS synchronization requires matching pairs.** Start/Stop and Pause/Unpause must each use the same key in OBS.
 - **Portable and custom-path OBS installations are not detected automatically.** The current implementation reads the standard `%APPDATA%\obs-studio\` configuration tree.
 - **The default bindings are numpad-based.** The script also registers AutoHotkey's alternate numpad names, but laptops without a usable numpad may still need custom bindings.
@@ -271,6 +318,25 @@ The GDI+ rendering code uses a reduced set of functions derived from [Gdip_All.a
 The Hotkeys tab uses [HotkeyPlus](https://github.com/mesutakcan/hotkeyplus-ahk), a separate hotkey-capture control written by the author and released under the MIT license.
 
 ## Changelog
+
+### v1.2 (2026-10-05)
+
+- Redesigned highlighter visibility: it is shown while recording (and not paused) or always when **Always show highlighter** is enabled. **Toggle Highlighter** now flips the current visibility, and a manual choice is kept until the recording stops.
+- The highlighter is hidden while **Pause Program** is active or the Settings window is open.
+- Fixed the ring and click-animation circles ending up under always-on-top windows.
+- Settings window: profile commands moved to a **File** menu (**Load Profile...**, **Save Profile As...** with the standard Save dialog); **Save** renamed to **OK**; **Reset to Defaults** placed on the bottom row.
+- Settings values are limited to their valid ranges when typed, saved, and loaded; ring thickness is capped at half the diameter.
+- Cleared hotkeys can now be saved and are treated as disabled.
+- Fixed a crash on startup when `settings.ini` contained an unreadable number.
+- The color picker now opens on top of the Settings window.
+- The Settings preview now matches the real ring size on scaled (high-DPI) displays.
+- Mouse position history: "Move to Saved Position" renamed to **Move to Last Position**; **Move to Previous Position** now works correctly right after saving; the cursor glides to the target so the ring follows.
+- New application icon (9 sizes) and a paused-state tray icon.
+- Added more OBS key names for synchronization (Numpad period, Scroll Lock, Num Lock, Caps Lock).
+- Fixed the default fill color mismatch between a missing `settings.ini` and **Reset to Defaults** (now cyan in both cases).
+- Faster rendering: hidden ring/fill windows are no longer moved, the render loop sleeps while the mouse is idle, and click-animation frames are pre-rendered at startup to avoid a stutter on the first click.
+- Fixed GDI+ resource cleanup on error paths and removed unused code.
+- Documented known limitations: recording state tracking, notification visibility, and clipboard indentation conversion.
 
 ### v1.1 (2026-09-10)
 
