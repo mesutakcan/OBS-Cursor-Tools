@@ -14,6 +14,8 @@ Make your mouse easy to follow in screen recordings.
 
 OBS Cursor Tools is a Windows utility written in AutoHotkey v2. It displays a configurable cursor ring, changes the ring and fill for left/middle/right clicks, animates clicks, and provides shortcuts for recording workflows. OBS Studio is optional; it is used when you want the application to synchronize recording hotkeys automatically.
 
+[![Demo](docs/demo.gif)](docs/demo.gif)
+
 ## Features
 
 - Displays a highlighter ring and optional inner fill around the cursor.
